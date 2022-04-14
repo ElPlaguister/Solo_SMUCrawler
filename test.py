@@ -111,15 +111,9 @@ if __name__ == '__main__':
     with open('private/target.txt', 'r') as f:
         targets = f.readline().split(' ')
     session = setup_session()
-    while True:
-        ids = crawl_swai(session)
-        ids = check_ids(ids)
-        add_ids(ids)
-        contents = []
-        for id in ids:
-            print(id)
-            contents.append(get_content_swai(id, session))
-        mail_body = config_mail(contents)
-        for target in targets:
-            send_mail(target, mail_body, subject = '오늘의 학교 정보입니다.')
-        time.sleep(3600 * 24)
+    ids = [713, 708, 706, 351]
+    contents = []
+    for id in ids:
+        contents.append(get_content_swai(id, session))
+    mail_body = config_mail(contents)
+    send_mail(targets[0], mail_body, subject = '오늘의 학교 정보입니다.')
