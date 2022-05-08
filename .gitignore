@@ -1,8 +1,3 @@
 
 .DS_Store
-private/data.txt
-private/key.properties
-private/privateManager.py
-private/target.txt
-private/__pycache__/privateManager.cpython-38.pyc
-private/main.ipynb
+private/
