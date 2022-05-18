@@ -6,84 +6,83 @@ import re
 import smtplib
 from email.mime.text import MIMEText
 import time
-from private import privateManager
+import privateManager
+from email.utils import formataddr
 
-def setup_session():
-    session = requests.Session()
-    retry = Retry(connect=3, backoff_factor=0.5)
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount('https://', adapter)
-
-    return session
-
-def crawl_swai(session):
-    urls = []
-    for i in range(5):
-        endpoint = 'https://swai.smu.ac.kr/bbs/board.php?bo_table=07_01&page=' + str(i + 1)
-        soup = bs(session.get(endpoint).text, 'html.parser')
-
-        tableText = soup.find('div', {'class' : 'tbl_head01 tbl_wrap'}).find('tbody')
-        articles = [a['href'] for a in tableText.findAll('a')]
-        urls.extend(articles)
-
-    res = [url.split('=')[-2].split('&')[0] for url in urls]
-    return res
-
-def add_smu_id(ids):
-    f = open('private/data_smu.txt', 'r')
-    datum = f.readline().split(' ')
-    for id in ids:
-        if id not in datum:
-            datum.append(id)
-    datum = ' '.join(datum)
-    f.close()
-    f = open('private/data_smu.txt', 'w')
-    f.write(datum)
-    f.close()
-
-def check_smu_id(ids):
-    res = []
-    with open('private/data_smu.txt', 'r') as f:
-        datum = f.readline().split(' ')
-    for id in ids:
-        if id not in datum:
-            res.append(id)
-    return res
-
-def add_swai_ids(ids):
-    f = open('private/data_swai.txt', 'r')
-    datum = f.readline().split(' ')
-    for id in ids:
-        if id not in datum:
-            datum.append(id)
-    datum = ' '.join(datum)
-    f.close()
-    f = open('private/data_swai.txt', 'w')
-    f.write(datum)
-    f.close()
-
-def check_swai_ids(ids):
-    datum = []
-    res = []
-    with open('private/data_swai.txt', 'r') as f:
-        datum = f.readline().split(' ')
-    for id in ids:
-        if id not in datum:
-            res.append(id)
-    return res
-
-def set_all_read():
-    ids = crawl_swai()
-    add_swai_ids(ids)
+def print_time():
+    now = time.localtime()
+    print ("%04d/%02d/%02d %02d:%02d:%02d" % (now.tm_year, now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec))
 
 def no_space(text):
   text1 = re.sub('\nbsp;|&nbsp;|\n|\t|\r|  ', '', text)
   text2 = re.sub('\n\n', '', text1)
   return text2
 
-def crawl_smu(session, set_all_read = False, ignore_cheon = True):
+def setup_session():
+    session = requests.Session()
+    retry = Retry(connect=3, backoff_factor=0.5)
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('https://', adapter)
+    return session
+
+def check_id(ids, type):
+    res = []
+    f = open(f'private/data_{type}.txt', 'r')
+    datum = f.readline().split(' ')
+    for id in ids:
+        if id not in datum:
+            datum.append(id)
+            res.append(id)
+    datum = ' '.join(datum)
+    f.close()
+    f = open(f'private/data_{type}.txt', 'w')
+    f.write(datum)
+    f.close()
+    return res
+
+def crawl_swai(session):
+    ids = []
+    res = []
+    for i in range(2):
+        endpoint = 'https://swai.smu.ac.kr/bbs/board.php?bo_table=07_01&page=' + str(i + 1)
+        try:
+            soup = bs(session.get(endpoint).text, 'html.parser')
+        except:
+            print('crawl swai failed')
+            return []
+
+        tableText = soup.find('div', {'class' : 'tbl_head01 tbl_wrap'}).find('tbody')
+        urls = [a['href'] for a in tableText.findAll('a')]
+        id = [x for x in (url.split('=')[-2].split('&')[0] for url in urls)]
+        title = [no_space(t.text) for t in tableText.findAll('a')]
+        date = [t.text for t in tableText.findAll('td', {'class' : 'td_datetime'})]
+
+        ids.extend(id)
+        for i in range(len(id)):
+            res.append({
+                'region' : '대학',
+                'category' : '[SWAI]',
+                'url' : urls[i],
+                'title' : title[i],
+                'date' : date[i],
+                'id' : id[i]
+            })
+    ids = check_id(ids, 'swai')
+    delList = []
+    for (i, article) in enumerate(res):
+        if article['id'] not in ids:
+            delList.append(i)
+    for i in delList:
+        res[i] = None
+    return res
+
+def crawl_smu(session, ignore_cheon = True):
     endpoint = 'https://www.smu.ac.kr/lounge/notice/notice.do'
-    soup = bs(session.get(endpoint).text, 'html.parser')
+    try:
+        soup = bs(session.get(endpoint).text, 'html.parser')
+    except:
+        print('crawl smu failed')
+        return []
     tableText = soup.find('ul', {'class' : 'board-thumb-wrap'})
     contents = tableText.findAll('dl', {'class' : 'board-thumb-content-wrap'})
     articles = []
@@ -97,7 +96,7 @@ def crawl_smu(session, set_all_read = False, ignore_cheon = True):
         tmp_url = 'https://www.smu.ac.kr/lounge/notice/notice.do?mode=view&articleNo=' + id + '&article.offset=0&articleLimit=10'
         title = no_space([a.text for a in content.find('dt', {'class' : 'board-thumb-content-title'}).findAll('a')][-1])
         article = {
-            'region' : region,
+            'region' : '대학',
             'category' : category,
             'url' : tmp_url,
             'title' : title,
@@ -106,10 +105,7 @@ def crawl_smu(session, set_all_read = False, ignore_cheon = True):
         }
         articles.append(article)
         ids.append(id)
-    ids = check_smu_id(ids)
-    if set_all_read:
-        add_smu_id(ids)
-        return
+    ids = check_id(ids, 'smu')
     delList = []
     for (i, article) in enumerate(articles):
         if article['id'] not in ids:
@@ -118,27 +114,7 @@ def crawl_smu(session, set_all_read = False, ignore_cheon = True):
             delList.append(i)
     for i in delList:
         articles[i] = None
-    add_smu_id(ids)
     return articles
-
-def get_content_swai(id, session):
-    endpoint = 'https://swai.smu.ac.kr/bbs/board.php?bo_table=07_01&wr_id=' + str(id)
-    soup = bs(session.get(endpoint).text, 'html.parser')
-    article = soup.find('article', {'id' : 'bo_v'})
-
-    title = article.find('span', {'class' : 'bo_v_tit'}).text
-    title = no_space(title).strip()
-    date = ' '.join(article.find('strong', {'class' : 'if_date'}).text.split(' ')[1:])
-    content = article.find('div', {'id' : 'bo_v_con'})
-    res = {
-        'region' : '서울',
-        'category' : 'SWAI',
-        'url' : endpoint,
-        'title' : title,
-        'date' : date,
-        'content' : content
-    }
-    return res
 
 def config_mail(contents):
     with open('mailFrame.html', 'r') as f:
@@ -162,34 +138,50 @@ def config_mail(contents):
         frame = None
     return frame
 
-
-def send_mail(target, content, subject = '오늘의 사업단 글입니다.'):
-    email = privateManager.getKey('email')
-    password = privateManager.getKey('password')
-
-    mail_session = smtplib.SMTP('smtp.gmail.com', 587)
-    mail_session.starttls()
-    mail_session.login(email, password)
-
+def send_mail(target, content, subject = '오늘의 사업단 글입니다.', fromSite = 'daum'):
+    
     msg = MIMEText(content, 'html')
     msg['Subject'] = subject
-    mail_session.sendmail("Secretary", target, msg.as_string())
+    msg['To'] = target
+    
+    try:
+        if fromSite == 'google':
+            email = privateManager.getKey('google_email')
+            password = privateManager.getKey('google_password')
 
-if __name__ == '__main__':
+            mail_session = smtplib.SMTP('smtp.gmail.com', 587)
+            mail_session.starttls()
+            mail_session.login(email, password)
+            msg['From'] = formataddr(('행정관 아코', 'kritiasmailsender@gmail.com'))
+            mail_session.send_message(msg)
+        elif fromSite == 'daum':
+
+            email = privateManager.getKey('daum_email')
+            password = privateManager.getKey('daum_password')
+
+            mail_session = smtplib.SMTP_SSL('smtp.daum.net', 465)
+            mail_session.login(email, password)
+
+            msg['From'] = formataddr(('행정관 아코', 'amau_ako@kivotos.tk'))
+            mail_session.sendmail(msg['From'], msg['To'], msg.as_string())
+    except:
+        pass
+
+def start(argv):
     with open('private/target.txt', 'r') as f:
         targets = f.readline().split(' ')
     session = setup_session()
+    set_all_read = False
+    if len(argv) == 2:
+        set_all_read = argv[1] == '1'
     while True:
-        ids = crawl_swai(session)
-        ids = check_swai_ids(ids)
-        add_swai_ids(ids)
-        contents = []
-        for id in ids:
-            print(id)
-            contents.append(get_content_swai(id, session))
-        contents.extend(crawl_smu(session))
+        print_time()
+        contents = [*crawl_swai(session), *crawl_smu(session)]
+        if set_all_read:
+            break
         mail_body = config_mail(contents)
         if mail_body != None:
             for target in targets:
                 send_mail(target, mail_body, subject = '오늘의 학교 정보입니다.')
-        time.sleep(10)
+                print(f'[{target}]님께 메일을 보냈습니다!')
+        time.sleep(300)
