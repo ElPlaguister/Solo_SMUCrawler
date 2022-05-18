@@ -6,7 +6,7 @@ import re
 import smtplib
 from email.mime.text import MIMEText
 import time
-import privateManager
+from privateManager import getKey
 from email.utils import formataddr
 
 def print_time():
@@ -146,8 +146,8 @@ def send_mail(target, content, subject = '오늘의 사업단 글입니다.', fr
     
     try:
         if fromSite == 'google':
-            email = privateManager.getKey('google_email')
-            password = privateManager.getKey('google_password')
+            email = getKey('google_email')
+            password = getKey('google_password')
 
             mail_session = smtplib.SMTP('smtp.gmail.com', 587)
             mail_session.starttls()
@@ -156,8 +156,8 @@ def send_mail(target, content, subject = '오늘의 사업단 글입니다.', fr
             mail_session.send_message(msg)
         elif fromSite == 'daum':
 
-            email = privateManager.getKey('daum_email')
-            password = privateManager.getKey('daum_password')
+            email = getKey('daum_email')
+            password = getKey('daum_password')
 
             mail_session = smtplib.SMTP_SSL('smtp.daum.net', 465)
             mail_session.login(email, password)
