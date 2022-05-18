@@ -185,3 +185,6 @@ def start(argv):
                 send_mail(target, mail_body, subject = '오늘의 학교 정보입니다.')
                 print(f'[{target}]님께 메일을 보냈습니다!')
         time.sleep(300)
+
+if __name__ == '__main__':
+    start([])
